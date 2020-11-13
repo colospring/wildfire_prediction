@@ -4,10 +4,65 @@ library(DBI)
 library(RSQLite)
 library(sp)
 library(rpostgis)
+library(tidyverse)
+library(haven)
 
+# load kaggle ata
 con <- dbConnect(drv=RSQLite::SQLite(), "C:/Liwei/data_mining/project/FPA_FOD_20170508.sqlite")
 data<-dbGetQuery(conn=con,statement = "select * from Fires")
+head(data)
+names(data) <- tolower(names(data))
+coords <- SpatialPoints(data[, c("longitude", "latitude")])
+spdata <- SpatialPointsDataFrame(coords, data)
+# upload data to pgadmin
 drv<-dbDriver("PostgreSQL")
 con<- dbConnect(RPostgres::Postgres(), dbname="postgres",host="localhost",port=5432,
                 user="postgres",password="postgres")
-pgInsert(con,name=c("kaggle","fire"),data.obj=data)
+pgInsert(con,name=c("kaggle","fire"),data.obj=spdata[1:600000,])
+pgInsert(con,name=c("kaggle","fire"),data.obj=spdata[600001:1200000,])
+pgInsert(con,name=c("kaggle","fire"),data.obj=spdata[1200001:1880465,])
+
+# load fdr data
+fdr2005<-read_dta("C:/Users/liuco/Downloads/fdr2005.dta")
+fdr2006<-read_dta("C:/Users/liuco/Downloads/fdr2006.dta")
+fdr2007<-read_dta("C:/Users/liuco/Downloads/fdr2007.dta")
+fdr2008<-read_dta("C:/Users/liuco/Downloads/fdr2008.dta")
+fdr2009<-read_dta("C:/Users/liuco/Downloads/fdr2009.dta")
+fdr2010<-read_dta("C:/Users/liuco/Downloads/fdr2010.dta")
+fdr2011<-read_dta("C:/Users/liuco/Downloads/fdr2011.dta")
+fdr2012<-read_dta("C:/Users/liuco/Downloads/fdr2012.dta")
+fdr2013<-read_dta("C:/Users/liuco/Downloads/fdr2013.dta")
+fdr2014<-read_dta("C:/Users/liuco/Downloads/fdr2014.dta")
+fdr2015<-read_dta("C:/Users/liuco/Downloads/fdr2015.dta")
+fdr2016<-read_dta("C:/Users/liuco/Downloads/fdr2016.dta")
+fdr2005$year<-2005
+fdr2006$year<-2006
+fdr2007$year<-2007
+fdr2008$year<-2008
+fdr2009$year<-2009
+fdr2010$year<-2010
+fdr2011$year<-2011
+fdr2012$year<-2012
+fdr2013$year<-2013
+fdr2014$year<-2014
+fdr2015$year<-2015
+fdr2016$year<-2016
+fdr2014<-fdr2014[,which(colnames(fdr2014)!='st_nameia')]
+colnames(fdr2016)<-c("Long","Lat","st_id","st_name","Elev","Mdl",
+                     "Tmp","RH","Wind","PPT","ERC","BI","SC",
+                     "KBDI","HUN","THOU","TEN","STL","ADJ",
+                     "IC","S1","S2","S3","S4","S5","State",
+                     "Date","dtst","STL5","year")
+fdr<-rbind(fdr2005, fdr2006, fdr2007, fdr2008, fdr2009, fdr2010,
+           fdr2011, fdr2012, fdr2013, fdr2014, fdr2015, fdr2016)
+names(fdr) <- tolower(names(fdr))
+summary(fdr$tmp)
+# convert fdr data to spatial point data frame
+coords <- SpatialPoints(fdr[, c("long", "lat")])
+spfdr <- SpatialPointsDataFrame(coords, fdr)
+# upload fdr data to pgadmin
+pgInsert(con,name=c("fdr","weather"),data.obj=spfdr[1:1000000,])
+pgInsert(con,name=c("fdr","weather"),data.obj=spfdr[1000001:2000000,])
+pgInsert(con,name=c("fdr","weather"),data.obj=spfdr[2000001:3000000,])
+pgInsert(con,name=c("fdr","weather"),data.obj=spfdr[3000001:4000000,])
+pgInsert(con,name=c("fdr","weather"),data.obj=spfdr[4000001:4340400,])
