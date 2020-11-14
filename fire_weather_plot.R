@@ -1,8 +1,10 @@
 #Load fire weather data
 library(haven)
 fire_weather2016 <- read_dta("/Volumes/NO NAME/WFAS/fdr2016.dta")
+#Stata date origin is Jan 1, 1960
+fire_weather2016$Date <- as.Date(fire_weather2016$Date, origin="1960-01-01")
 #select fire weather data from a date near mid-year
-july_fwd <- subset(fire_weather2016, Date == 20634)
+july_fwd <- subset(fire_weather2016, Date == "2016-07-15")
 #keep data within continental U.S.
 july_fwd <- subset(july_fwd, longitude > -140 & longitude < -66)
 july_fwd <- subset(july_fwd, !(State %in% c("Alaska","Hawaii","Puerto Rico","a")))
