@@ -1,26 +1,43 @@
-#Import wildfire data
+#November 16, 2020
+#This script loads wildfire data for analysis
+
+#Required packages
 library(RSQLite)
-con <- dbConnect(drv=RSQLite::SQLite(), 
-                 dbname="/Users/gregoryklevans/Downloads/FPA_FOD_20170508.sqlite")
-fires <- dbReadTable(con, "Fires")
-
-#Get calendar dates
-fires$DATE <- sapply(fires$FIRE_YEAR, toString)    #convert fire years to string
-fires$DATE <- paste0(fires$DATE , "-01-01")      #set dates to beginning of year
-fires$DATE <- as.Date(fires$DISCOVERY_DOY, origin=fires$DATE)   #add day of year
-
-#Import fire weather data
 library(haven)
-fire_weather <- read_dta("/Volumes/NO NAME/WFAS/fdr.dta")
+library(sp)
+library(rgdal)
+library(data.table)
+
+#Import data (stored in data subfolder of parent folder)
+#Wildfire data
+con <- dbConnect(drv=RSQLite::SQLite(), 
+                 dbname="./../Project Data/FPA_FOD_20170508.sqlite")
+fires <- dbReadTable(con, "Fires")
+#Fire weather data
+fire_weather <- haven::read_dta("./../Project Data/fdr.dta")
+#Fire weather zone shapefiles
+fwz <- rgdal::readOGR(dsn= "./../Project Data/fz03mr20", 
+                      layer="fz03mr20", verbose=FALSE)
+
+#Get calendar dates from year and day of year
+fires$DATE <- as.Date(fires$DISCOVERY_DOY - 1, 
+                      origin=paste(fires$FIRE_YEAR, 1, 1, sep="-"))
+
 #Get calendar dates: Stata date origin is Jan 1, 1960
 fire_weather$Date <- as.Date(fire_weather$Date, origin="1960-01-01")
 
-#Convert data to spatial points data frames
-library(sp)
-coordinates(fires) <- ~ LONGITUDE + LATITUDE
-coordinates(fire_weather) <- ~ Long + Lat
+#Convert data to spatial points data frames, and make projections identical
+sp::coordinates(fires) <- ~ LONGITUDE + LATITUDE
+sp::coordinates(fire_weather) <- ~ Long + Lat
+proj4string(fire_weather) <- proj4string(fires)
+proj4string(fwz) <- proj4string(fires)
 
-#Import fire weather zone shapefiles
-library(rgdal)
-fwz <- readOGR(dsn= "/Users/gregoryklevans/Downloads/fz03mr20", 
-               layer="fz03mr20", verbose=FALSE)
+#Add fire weather zone each wildfire was in
+fires$ZONE <- sp::over(fires, fwz)[, c("ZONE")]
+fire_weather$Zone <- sp::over(fire_weather, fwz)[, c("ZONE")] #needlessly slow
+
+#Aggregate fire weather data by zone
+#data.table package performs aggregations quickly
+fire_weather_dt <- data.table::as.data.table(fire_weather)
+fire_weather_dt[, lapply(.SD, mean),  by = .(Zone, Date), 
+                .SDcols = c("BI","ERC","Wind","KBDI")]
