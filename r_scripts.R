@@ -12,6 +12,10 @@ con <- dbConnect(drv=RSQLite::SQLite(), "C:/Liwei/data_mining/project/FPA_FOD_20
 data<-dbGetQuery(conn=con,statement = "select * from Fires")
 head(data)
 names(data) <- tolower(names(data))
+data$start_date <- as.Date(data$discovery_doy - 1, 
+                      origin=paste(data$fire_year, 1, 1, sep="-"))
+data$end_date <- as.Date(data$cont_doy - 1, 
+                           origin=paste(data$fire_year, 1, 1, sep="-"))
 coords <- SpatialPoints(data[, c("longitude", "latitude")])
 spdata <- SpatialPointsDataFrame(coords, data)
 # upload data to pgadmin
@@ -56,7 +60,8 @@ colnames(fdr2016)<-c("Long","Lat","st_id","st_name","Elev","Mdl",
 fdr<-rbind(fdr2005, fdr2006, fdr2007, fdr2008, fdr2009, fdr2010,
            fdr2011, fdr2012, fdr2013, fdr2014, fdr2015, fdr2016)
 names(fdr) <- tolower(names(fdr))
-summary(fdr$tmp)
+fdr$date<-as.Date(fdr$date, origin="1960-01-01")
+summary(fdr)
 # convert fdr data to spatial point data frame
 coords <- SpatialPoints(fdr[, c("long", "lat")])
 spfdr <- SpatialPointsDataFrame(coords, fdr)
@@ -111,3 +116,20 @@ pgInsert(con,name=c("bc","fire_report"),data.obj=bc2011[500001:1000000,])
 pgInsert(con,name=c("bc","fire_report"),data.obj=bc2011[1000001:1500000,])
 pgInsert(con,name=c("bc","fire_report"),data.obj=bc2011[1500001:2000000,])
 pgInsert(con,name=c("bc","fire_report"),data.obj=bc2011[2000001:2311716,])
+pgInsert(con,name=c("bc","fire_report"),data.obj=bc2012[1:500000,])
+pgInsert(con,name=c("bc","fire_report"),data.obj=bc2012[500001:1000000,])
+pgInsert(con,name=c("bc","fire_report"),data.obj=bc2012[1000001:1500000,])
+pgInsert(con,name=c("bc","fire_report"),data.obj=bc2012[1500001:2000000,])
+pgInsert(con,name=c("bc","fire_report"),data.obj=bc2012[2000001:2120288,])
+pgInsert(con,name=c("bc","fire_report"),data.obj=bc2013[1:500000,])
+pgInsert(con,name=c("bc","fire_report"),data.obj=bc2013[500001:1000000,])
+pgInsert(con,name=c("bc","fire_report"),data.obj=bc2013[1000001:1500000,])
+pgInsert(con,name=c("bc","fire_report"),data.obj=bc2013[1500001:2000000,])
+pgInsert(con,name=c("bc","fire_report"),data.obj=bc2013[2000001:2003907,])
+# change memory limit
+memory.limit()
+memory.limit(size = 16300)
+# upload 2014 data
+for (i in 0:45){
+  pgInsert(con,name=c("bc","fire_report_2014"),data.obj=bc2014[(1+i*500000):500000*(i+1),])
+}
