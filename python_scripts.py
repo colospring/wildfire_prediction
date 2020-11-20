@@ -1,5 +1,6 @@
 import sqlite3
 import psycopg2
+import csv
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -8,51 +9,67 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # load data from sqlite
+'''
 sqlite_conn = sqlite3.connect('C:/Liwei/data_mining/project/FPA_FOD_20170508.sqlite')
 from_cursor = sqlite_conn.cursor()
 from_cursor.execute("SELECT * FROM 'Fires'")
+'''
 
-'''
 # connect to psql and upload data
-conn = psycopg2.connect(user = "postgres",
-                        password = "postgres",
-                        host = "localhost",
-                        port = "5432",
-                        database = "postgres")
-to_cursor = conn.cursor()
-insert_query = "INSERT INTO fire VALUES"
-to_cursor.executemany(insert_query, from_cursor.fetchall())
-'''
+conn = psycopg2.connect(user="postgres",
+                        password="postgres",
+                        host="localhost",
+                        port="5432",
+                        database="postgres")
+cursor = conn.cursor()
+df = pd.read_sql_query("SELECT * FROM main.analysis", conn)
 
 # load data to python
+'''
 df = pd.read_sql_query("SELECT * FROM 'Fires'", sqlite_conn)
 wf = df[['FIRE_YEAR', 'DISCOVERY_DATE', 'DISCOVERY_DOY', 'DISCOVERY_TIME', 'STAT_CAUSE_CODE',
          'STAT_CAUSE_DESCR', 'CONT_DATE', 'CONT_DOY', 'CONT_TIME', 'FIRE_SIZE', 'FIRE_SIZE_CLASS',
          'LATITUDE', 'LONGITUDE', 'STATE', 'COUNTY']].copy()
-wf = wf.rename(columns=str.lower)
+'''
+
+wf = df.rename(columns=str.lower)
 print(wf.dtypes)
 
-# encode fire cause
-len(wf['stat_cause_descr'].unique())
-# one-hot encoding of categorical variables
-cause = pd.get_dummies(wf['stat_cause_descr'])
-wf = pd.concat([wf, cause.loc[:, cause.columns != 'Missing/Undefined']], axis=1, sort=False)
-wf = wf.rename(columns=str.lower)
+# convert date from string to datetime
+wf['start_date'] = pd.to_datetime(wf['start_date'], format='%Y-%m-%d')
+wf['end_date'] = pd.to_datetime(wf['end_date'], format='%Y-%m-%d')
+wf['month'] = pd.DatetimeIndex(df['start_date']).month
+wf['dow'] = pd.DatetimeIndex(df['start_date']).dayofweek  # Monday=0, Sunday=6
+
 
 # check data summary and distribution
-wf[['fire_year', 'discovery_date','fire_size']].describe()
+pd.set_option('display.max_columns', 10)
+wf[['cont_time', 'fire_size', 'bi', 'tmp', 'wind', 'sc', 'erc', 'kbdi']].describe()
 # distribution plots
-wf['fire_year'].plot.hist(title = 'Fire Year Histogram')
+wf['fire_year'].plot.hist(title='Fire Year Histogram')
 plt.xlabel('Fire Year')
-wf['stat_cause_descr'].value_counts().plot(kind='bar', title = 'Fire Cause Histogram')
+wf['month'].plot.hist(title='Fire Month Histogram')
+plt.xlabel('Fire Month')
+wf['dow'].plot.hist(title='Fire Day-of-Week Histogram')
+plt.xlabel('Day of week')
+wf['stat_cause_descr'].value_counts().plot(kind='bar', title='Fire Cause Histogram')
 plt.xlabel('Fire Cause')
-wf['state'].value_counts().plot(kind='bar', title = 'State Histogram')
+wf['fire_state'].value_counts().plot(kind='bar', title='State Histogram')
 plt.xlabel('State')
-wf['fire_size'].plot.hist(title = 'Fire Size Histogram')
+wf['cont_time'].plot.hist(title='Fire Contained Time Histogram')
+plt.xlabel('Fire Contained Time (Day)')
+wf.loc[wf['cont_time'] < 50, 'cont_time'].plot.hist(title='Fire Contained Time Histogram')
+plt.xlabel('Fire Contained Time (Day)')
+wf['fire_size'].plot.hist(title='Fire Size Histogram')
 plt.xlabel('Fire Size')
-wf[wf['fire_size']<100].fire_size.plot.hist(title = 'Fire Size Histogram')
+wf[wf['fire_size'] < 100].fire_size.plot.hist(title='Fire Size Histogram')
 plt.xlabel('Fire Size')
-len(wf[wf['fire_size']>100])
+len(wf[wf['fire_size'] > 100])
+wf['fire_size_class'].value_counts().plot(kind='bar', title='Fire Size Class Histogram', rot=0)
+plt.xlabel('Fire Size')
+sns.kdeplot(wf['bi'], label='BI')
+sns.kdeplot(wf['tmp'], label='Temperature')
+sns.kdeplot(wf['wind'], label='Wind Speed')
 
 # anomaly analysis
 anom = wf[wf['fire_size']>100]
@@ -89,7 +106,7 @@ def outlier_plot(metric, xname):
 # plot fire cause distribution
 outlier_plot(metric='stat_cause_descr', xname='Fire Cause')
 # plot state distribution
-outlier_plot(metric='state', xname='State')
+outlier_plot(metric='fire_state', xname='State')
 
 
 # check missing values
@@ -123,9 +140,9 @@ print(missing_values)
 
 # check whether missing values are random
 def missing_values_plot(df, miss, metric):
-    plt.figure(figsize = (10, 8))
+    plt.figure(figsize=(10, 8))
     # KDE plot of loans that were repaid on time
-    sns.kdeplot(df.loc[df[miss].isnull(), metric], label = 'missing')
+    sns.kdeplot(df.loc[df[miss].isnull(), metric], label='missing')
     # KDE plot of loans which were not repaid on time
     sns.kdeplot(df.loc[df[miss].notnull(), metric], label = 'not missing')
     # Labeling of plot
@@ -133,17 +150,67 @@ def missing_values_plot(df, miss, metric):
     plt.ylabel(miss)
     plt.title('Distribution')
     plt.legend()
-missing_values_plot(wf, miss='cont_date', metric='fire_year')
-missing_values_plot(wf, miss='cont_date', metric='discovery_date')
-missing_values_plot(wf, miss='cont_date', metric='stat_cause_code')
-missing_values_plot(wf, miss='cont_date', metric='fire_size')
 
-# convert time and date from string to datetime
-wf['start_date'] = pd.to_datetime(wf['discovery_date'] - pd.Timestamp(0).to_julian_date(), unit='D')
-wf['start_time'] = wf['start_date'].astype(str)+' '+wf['discovery_time']
-wf['start_time'] = pd.to_datetime(wf['start_time'], format='%Y-%m-%d %H%M')
-wf.loc[wf['discovery_time'].isnull(), 'start_time'] = wf['start_date']
-wf['end_date'] = pd.to_datetime(wf['cont_date'] - pd.Timestamp(0).to_julian_date(), unit='D')
-wf['end_time'] = wf['end_date'].astype(str)+' '+wf['cont_time']
-wf['end_time'] = pd.to_datetime(wf['end_time'], format='%Y-%m-%d %H%M')
+
+missing_values_plot(wf, miss='end_date', metric='fire_year')
+missing_values_plot(wf, miss='end_date', metric='stat_cause_code')
+missing_values_plot(wf, miss='end_date', metric='fire_size')
+missing_values_plot(wf[wf['fire_size'] < 100], miss='end_date', metric='fire_size')
+print('The average fire size with missing contained time is %0.2f' %(wf.loc[wf['cont_time'].isnull(),'fire_size'].mean()))
+print('The average fire size without missing contained time is %0.2f' %(wf.loc[wf['cont_time'].notnull(),'fire_size'].mean()))
+# plot frequencies of different fire classes by missing value
+bins = np.arange(len(wf['fire_size_class'].unique()))
+a = wf.loc[wf['cont_time'].isnull(), 'fire_size_class'].value_counts()/len(wf.loc[wf['cont_time'].isnull(), 'fire_size_class'])
+b = wf.loc[wf['cont_time'].notnull(), 'fire_size_class'].value_counts()/len(wf.loc[wf['cont_time'].notnull(), 'fire_size_class'])
+c = pd.concat([a, b], axis=1).sort_index()
+a = c.iloc[:, 0]
+b = c.iloc[:, 1]
+plt.bar(bins, b, alpha=0.5, label='not missing')
+plt.bar(bins, a, alpha=0.5, label='missing')
+plt.xticks(bins, a.index.values)
+plt.xlabel('fire size class')
+plt.title('Distribution')
+plt.legend()
+plt.show()
+
+# one-hot encoding of categorical variables
+# encode fire cause
+len(wf['stat_cause_descr'].unique())
+cause = pd.get_dummies(wf['stat_cause_descr'])
+wf = pd.concat([wf, cause.loc[:, cause.columns != 'Missing/Undefined']], axis=1, sort=False)
+wf = wf.rename(columns=str.lower)
+# encode fire size class
+len(wf['fire_size_class'].unique())
+fire_size = pd.get_dummies(wf['fire_size_class'])
+wf = pd.concat([wf, fire_size.loc[:, fire_size.columns != 'G']], axis=1, sort=False)
+wf = wf.rename(columns=str.lower)
+# encode day of week
+len(wf['dow'].unique())
+dow = pd.get_dummies(wf['dow'])
+dow.columns = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+wf = pd.concat([wf, dow.loc[:, dow.columns != 'sun']], axis=1, sort=False)
+wf = wf.rename(columns=str.lower)
+# encode state
+len(wf['fire_state'].unique())
+state = pd.get_dummies(wf['fire_state'])
+wf = pd.concat([wf, state.loc[:, state.columns != 'WY']], axis=1, sort=False)
+
+# check data correlation with fire size
+wf_nm = wf.drop(columns=['objectid', 'stat_cause_code', 'stat_cause_descr', 'latitude', 'longitude', 'start_date',
+                         'end_date', 'fire_geom', 'fire_state', 'dow', 'fire_size_class'])
+print(wf_nm.dtypes)
+correlations = wf_nm.drop(columns=['a', 'b', 'c', 'd', 'e', 'f']).corr()['fire_size'].sort_values()
+print('Most Positive Correlations:\n', correlations.tail(15))
+print('\nMost Negative Correlations:\n', correlations.head(15))
+# check data correlation with contained time
+correlations = wf_nm.drop(columns=['a', 'b', 'c', 'd', 'e', 'f']).corr()['cont_time'].sort_values()
+print('Most Positive Correlations:\n', correlations.tail(15))
+print('\nMost Negative Correlations:\n', correlations.head(15))
+
+# check feature correlations
+feature_cor = wf_nm.drop(columns=['a', 'b', 'c', 'd', 'e', 'f', 'fire_size']).corr()
+# heatmap of correlation
+plt.figure(figsize=(10, 8))
+sns.heatmap(feature_cor, cmap=plt.cm.RdYlBu_r, vmin=-0.6, annot=False, vmax=0.6)
+plt.title('Correlation Heatmap')  # erc and bi have high correlation, can drop erc
 

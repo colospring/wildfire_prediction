@@ -106,4 +106,14 @@ latitude, longitude, fire_state, start_date, end_date, fire_geom,
 coalesce(tmp,tmp_s) as tmp, coalesce(rh,rh_s) as rh, coalesce(wind,wind_s) as wind,
 coalesce(erc,erc_s) as erc, coalesce(bi,bi_s) as bi, coalesce(sc,sc_s) as sc,
 coalesce(kbdi,kbdi_s) as kbdi
-from main.fire_weather_state
+from main.fire_weather_state;
+
+-- create table for analysis (with only states we are interested in)
+create table main.analysis as
+select *, end_date-start_date as cont_time from main.fire_weather
+where fire_state in
+('CA','WA','OR','AZ','NV','ID','UT','WY','MT','NM','CO','FL','GA','SC','NC');
+
+update main.analysis
+set cont_time=null
+where cont_time<0;
