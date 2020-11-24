@@ -68,8 +68,11 @@ len(wf[wf['fire_size'] > 100])
 wf['fire_size_class'].value_counts().plot(kind='bar', title='Fire Size Class Histogram', rot=0)
 plt.xlabel('Fire Size')
 sns.kdeplot(wf['bi'], label='BI')
+plt.title('Distribution of BI')
 sns.kdeplot(wf['tmp'], label='Temperature')
+plt.title('Distribution of Temperature')
 sns.kdeplot(wf['wind'], label='Wind Speed')
+plt.title('Distribution of Wind Speed')
 
 # anomaly analysis
 anom = wf[wf['fire_size']>100]
@@ -214,3 +217,5 @@ plt.figure(figsize=(10, 8))
 sns.heatmap(feature_cor, cmap=plt.cm.RdYlBu_r, vmin=-0.6, annot=False, vmax=0.6)
 plt.title('Correlation Heatmap')  # erc and bi have high correlation, can drop erc
 
+# export to csv file
+wf_nm.to_csv('C:\Liwei\data_mining\project\cleaned_data.csv',index=False)
