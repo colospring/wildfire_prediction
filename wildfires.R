@@ -1,4 +1,4 @@
-#November 23, 2020
+#November 27, 2020
 #This script loads wildfire data for analysis
 
 #Required packages
@@ -41,7 +41,10 @@ fire_weather$Zone <- sp::over(fire_weather, fwz)[, c("ZONE")] #needlessly slow
 #Aggregate fire weather data by zone
 #data.table package performs aggregations quickly
 fire_weather_dt <- data.table::as.data.table(fire_weather)
-fire_weather_dt[, lapply(.SD, mean),  by = .(Zone, Date), 
+west_long <- c("California","Oregon","Washington","Arizona","Utah","Nevada",
+               "Idaho","New Mexico","Colorado","Wyoming","Montana")
+fire_weather_dt <- subset(fire_weather_dt, State %in% west_long)
+fire_weather_dt <- fire_weather_dt[, lapply(.SD, mean),  by = .(Zone, Date), 
                 .SDcols = c("BI","ERC","Wind","KBDI")]
 fire_weather_lt <- fire_weather_dt[, lapply(.SD, mean),  by = .(Zone), 
                   .SDcols = c("BI","ERC","Wind","KBDI")]
@@ -73,6 +76,19 @@ ggplot() + geom_polygon(data = fwz_ff_cl,
                         aes(x = long, y = lat, group = group, fill = cluster), 
                         colour = "black") +
   scale_fill_discrete(name="Cluster", 
-                      labels=c("Dry and Windy","High Fire Risk",
-                               "Low Fire Risk","Not in a Cluster"))
+                      labels=c("High Fire Risk","Low Fire Risk",
+                               "Dry and Windy","Not in a Cluster"))
 dev.off()
+
+#Aggregate fire size
+fire_panel <- merge(fire_weather_dt, fires, 
+                    by.x=c("Date","Zone"), by.y=c("DATE","ZONE"), 
+                    all.x=TRUE, all.y=FALSE)
+fire_panel <- fire_panel[!is.na(fire_panel$Zone), ]
+fire_panel$FIRE_SIZE[is.na(fire_panel$FIRE_SIZE)] <- 0
+fire_panel <- fire_panel[, lapply(.SD, sum),  by = .(Zone, Date), 
+                .SDcols = c("FIRE_SIZE")]
+fire_panel <- merge(fire_panel, fire_weather_dt, by=c("Zone","Date"))
+num_zone_days <- 
+  length(unique(fire_weather_dt$Date)) * length(unique(fire_weather_dt$Zone))
+nrow(fire_panel) / num_zone_days #check number of missing values in panel (~30%)
