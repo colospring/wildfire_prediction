@@ -6,8 +6,11 @@ create schema bc;
 create schema plots;
 create schema main;
 ALTER TABLE kaggle.fire ADD PRIMARY KEY (objectid);
+-- create indexes
 CREATE INDEX objectid_idx ON kaggle.fire(objectid);
 CREATE INDEX stid_idx ON fdr.weather(st_id);
+CREATE INDEX sp_idx ON land_cover USING GIST (geom);
+CREATE INDEX sp_fire_idx ON main.analysis USING GIST (fire_geom);
 
 -- add state abbreviation to fire weather data
 create table fdr.weather_up as
@@ -130,3 +133,57 @@ select *,
 case when end_date-start_date<0 then null
 else end_date-start_date end cont_time
 from main.fire_weather_fz;
+
+-- create population table
+create table pop_county(
+	state int,
+	county int NOT NULL,
+	population real
+);
+-- merge geom to population table
+create table pop_county_up as
+select t2.*,t1.geom from county t1
+join pop_county t2
+on CAST(t1.countyfp AS int)=t2.county
+and CAST(t1.statefp AS int)=t2.state;
+
+drop table pop_county;
+alter table pop_county_up rename to pop_county;
+-- create a table of county areas
+create table area_county(
+	code int NOT NULL,
+	area real
+);
+-- calculate population density by county
+create table pop_county_dens as
+select t1.*, t2.area, t1.population/t2.area as pop_dens from pop_county t1
+join
+(select right(cast(code as varchar(50)),3)::int as county,
+left(right('0'|| cast(code as varchar(50)),5),2)::int as state, area
+from area_county) t2
+on t1.county=t2.county and t1.state=t2.state;
+
+CREATE INDEX sp_pop_idx ON pop_county_dens USING GIST (geom);
+
+-- merge population density to the main analysis table
+create table main.analysis_up as
+select t1.*, t2.pop_dens from main.analysis t1
+join pop_county_dens t2
+on ST_Contains(t2.geom, t1.fire_geom);
+
+drop table main.analysis;
+alter table main.analysis_up rename to analysis;
+
+-- create land_class table
+create table land_class(
+	band int primary key,
+	land_type VARCHAR(250),
+	class VARCHAR(250)
+);
+-- add land_cover information to the analysis table
+create table main.analysis_up as
+select t1.*, t3.class as land_type from main.analysis t1
+join land_cover_shp t2
+on ST_Contains(t2.geom, t1.fire_geom)
+join land_class t3
+on t2.suitable=t3.band;

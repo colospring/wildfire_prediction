@@ -6,6 +6,8 @@ library(sp)
 library(rpostgis)
 library(tidyverse)
 library(haven)
+library(raster)
+library(rgdal)
 
 # load kaggle ata
 con <- dbConnect(drv=RSQLite::SQLite(), "C:/Liwei/data_mining/project/FPA_FOD_20170508.sqlite")
@@ -72,64 +74,32 @@ pgInsert(con,name=c("fdr","weather"),data.obj=spfdr[2000001:3000000,])
 pgInsert(con,name=c("fdr","weather"),data.obj=spfdr[3000001:4000000,])
 pgInsert(con,name=c("fdr","weather"),data.obj=spfdr[4000001:4340400,])
 
-# load basicincident data
-bc2014 <- read.delim("C:/Users/liuco/Downloads/basicincident2014.txt",
-                     header=TRUE, sep="^")
-names(bc2014) <- tolower(names(bc2014))
-bc2016 <- read.delim("C:/Users/liuco/Downloads/basicincident2016.txt",
-                     header=TRUE, sep="^")
-names(bc2016) <- tolower(names(bc2016))
-bc2013 <- read.delim("C:/Users/liuco/Downloads/basicincident2013.txt",
-                     header=TRUE, sep="^")
-names(bc2013) <- tolower(names(bc2013))
-bc2012 <- read.delim("C:/Users/liuco/Downloads/basicincident2012.txt",
-                     header=TRUE, sep="^")
-names(bc2012) <- tolower(names(bc2012))
-bc2010 <- read.dbf("C:/Users/liuco/Downloads/basicincident2010.dbf")
-names(bc2010) <- tolower(names(bc2010))
-bc2011 <- read.dbf("C:/Users/liuco/Downloads/basicincident2011.dbf")
-names(bc2011) <- tolower(names(bc2011))
-bc2009 <- read.dbf("C:/Users/liuco/Downloads/basicincident2009.dbf")
-names(bc2009) <- tolower(names(bc2009))
-bc2008 <- read.dbf("C:/Users/liuco/Downloads/basicincident2008.dbf")
-names(bc2008) <- tolower(names(bc2008))
-bc2007 <- read.dbf("C:/Users/liuco/Downloads/basicincident2007.dbf")
-names(bc2007) <- tolower(names(bc2007))
 
-# upload to pgadmin
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2007[1:1000000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2007[1000001:1500000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2007[1500001:2197537,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2008[1:1000000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2008[1000001:1500000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2008[1500001:2178599,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2009[1:1000000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2009[1000001:1500000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2009[1500001:2072850,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2010[1:500000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2010[500001:1000000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2010[1000001:1500000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2010[1500001:2000000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2010[2000001:2221660,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2011[1:500000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2011[500001:1000000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2011[1000001:1500000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2011[1500001:2000000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2011[2000001:2311716,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2012[1:500000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2012[500001:1000000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2012[1000001:1500000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2012[1500001:2000000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2012[2000001:2120288,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2013[1:500000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2013[500001:1000000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2013[1000001:1500000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2013[1500001:2000000,])
-pgInsert(con,name=c("bc","fire_report"),data.obj=bc2013[2000001:2003907,])
-# change memory limit
-memory.limit()
-memory.limit(size = 16300)
-# upload 2014 data
-for (i in 0:45){
-  pgInsert(con,name=c("bc","fire_report_2014"),data.obj=bc2014[(1+i*500000):500000*(i+1),])
-}
+# land cover
+land_raster<-raster("C:/Liwei/data_mining/project/data/land_cover/resampled.tif")
+band<-as.data.frame(values(land_raster))
+xy<-as.data.frame(xyFromCell(land_raster,1:ncell(land_raster)))
+land_cover<-cbind(xy,band)
+colnames(land_cover)=c('x','y','band')
+land_cover<-land_cover[which(land_cover$band!=0),]
+rownames(land_cover) <- 1:nrow(land_cover)
+coords <- SpatialPoints(land_cover[, c("x", "y")])
+spland <- SpatialPointsDataFrame(coords, land_cover)
+pgInsert(con,name=c("public","land_cover"),data.obj=spland[1:500000,])
+pgInsert(con,name=c("public","land_cover"),data.obj=spland[500001:1000000,])
+pgInsert(con,name=c("public","land_cover"),data.obj=spland[1000001:1500000,])
+pgInsert(con,name=c("public","land_cover"),data.obj=spland[1500001:2000000,])
+pgInsert(con,name=c("public","land_cover"),data.obj=spland[2000001:2090545,])
+
+# population density by county
+pop<-read.csv("C:/Users/liuco/Downloads/co-est2019-alldata.csv")
+names(pop) <- tolower(names(pop))
+pop_census<-pop[,c('state','county','census2010pop')]
+colnames(pop_census)<-c('state','county','population')
+write.csv(pop_census, "C:/Liwei/data_mining/project/data/population_dens/pop.csv", row.names = FALSE)
+# county area data (square miles)
+area<-read.csv("C:/Users/liuco/Downloads/LND01.csv")
+names(area) <- tolower(names(area))
+area_2010<-area[2:nrow(area),c('stcou','lnd110210d')]
+colnames(area_2010)<-c('code','area')
+write.csv(area_2010, "C:/Liwei/data_mining/project/data/population_dens/area.csv", row.names = FALSE)
