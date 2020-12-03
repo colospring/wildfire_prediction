@@ -187,3 +187,6 @@ join land_cover_shp t2
 on ST_Contains(t2.geom, t1.fire_geom)
 join land_class t3
 on t2.suitable=t3.band;
+
+drop table main.analysis;
+alter table main.analysis_up rename to analysis;

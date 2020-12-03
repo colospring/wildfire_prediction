@@ -44,7 +44,7 @@ wf['dow'] = pd.DatetimeIndex(df['start_date']).dayofweek  # Monday=0, Sunday=6
 
 # check data summary and distribution
 pd.set_option('display.max_columns', 10)
-wf[['cont_time', 'fire_size', 'bi', 'tmp', 'wind', 'sc', 'erc', 'kbdi']].describe()
+wf[['cont_time', 'fire_size', 'bi', 'tmp', 'wind', 'sc', 'erc', 'kbdi', 'pop_dens']].describe()
 # distribution plots
 wf['fire_year'].plot.hist(title='Fire Year Histogram')
 plt.xlabel('Fire Year')
@@ -52,10 +52,14 @@ wf['month'].plot.hist(title='Fire Month Histogram')
 plt.xlabel('Fire Month')
 wf['dow'].plot.hist(title='Fire Day-of-Week Histogram')
 plt.xlabel('Day of week')
+wf['pop_dens'].plot.hist(title='Population Density Histogram')
+plt.xlabel('Population density')
 wf['stat_cause_descr'].value_counts().plot(kind='bar', title='Fire Cause Histogram')
 plt.xlabel('Fire Cause')
 wf['fire_state'].value_counts().plot(kind='bar', title='State Histogram')
 plt.xlabel('State')
+wf['land_type'].value_counts().plot(kind='bar', title='Land Cover Histogram')
+plt.xlabel('Land type')
 wf['cont_time'].plot.hist(title='Fire Contained Time Histogram')
 plt.xlabel('Fire Contained Time (Day)')
 wf.loc[wf['cont_time'] < 50, 'cont_time'].plot.hist(title='Fire Contained Time Histogram')
@@ -177,6 +181,11 @@ plt.legend()
 plt.show()
 
 # one-hot encoding of categorical variables
+# encode land class
+len(wf['land_type'].unique())
+land_type = pd.get_dummies(wf['land_type'])
+wf = pd.concat([wf, land_type.loc[:, land_type.columns != 'barren land']], axis=1, sort=False)
+wf = wf.rename(columns=str.lower)
 # encode fire cause
 len(wf['stat_cause_descr'].unique())
 cause = pd.get_dummies(wf['stat_cause_descr'])
@@ -200,7 +209,7 @@ wf = pd.concat([wf, state.loc[:, state.columns != 'WY']], axis=1, sort=False)
 
 # check data correlation with fire size
 wf_nm = wf.drop(columns=['objectid', 'stat_cause_code', 'stat_cause_descr', 'latitude', 'longitude', 'start_date',
-                         'end_date', 'fire_geom', 'fire_state', 'dow', 'fire_size_class'])
+                         'end_date', 'fire_geom', 'fire_state', 'dow', 'fire_size_class', 'land_type'])
 print(wf_nm.dtypes)
 correlations = wf_nm.drop(columns=['a', 'b', 'c', 'd', 'e', 'f']).corr()['fire_size'].sort_values()
 print('Most Positive Correlations:\n', correlations.tail(15))
@@ -211,11 +220,11 @@ print('Most Positive Correlations:\n', correlations.tail(15))
 print('\nMost Negative Correlations:\n', correlations.head(15))
 
 # check feature correlations
-feature_cor = wf_nm.drop(columns=['a', 'b', 'c', 'd', 'e', 'f', 'fire_size']).corr()
+feature_cor = wf_nm.drop(columns=['a', 'b', 'c', 'd', 'e', 'f', 'fire_size', 'cont_time']).corr()
 # heatmap of correlation
 plt.figure(figsize=(10, 8))
 sns.heatmap(feature_cor, cmap=plt.cm.RdYlBu_r, vmin=-0.6, annot=False, vmax=0.6)
-plt.title('Correlation Heatmap')  # erc and bi have high correlation, can drop erc
+plt.title('Correlation Heatmap')  # erc and bi have high correlation, can drop one
 
 # export to csv file
 wf_nm.to_csv('C:\Liwei\data_mining\project\cleaned_data.csv',index=False)
