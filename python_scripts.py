@@ -12,18 +12,20 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor
-from sklearn import metrics
-from sklearn.metrics import r2_score
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.model_selection import GridSearchCV
 import xgboost as xg
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+# evaluation tools
+from sklearn import metrics
+from sklearn.metrics import r2_score
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import recall_score
 from sklearn.metrics import f1_score
 from sklearn.metrics import roc_auc_score
 from sklearn.metrics import roc_curve, auc
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.inspection import permutation_importance
 
 # load data from sqlite
 '''
@@ -726,6 +728,7 @@ F1 Score: 0.6008914532709038
 
 # Extract feature importances
 feature_importances = pd.DataFrame(best_random.feature_importances_)
+feature_importances = permutation_importance(xgb, X_train, fire_class_train, n_repeats=10, random_state=0)
 feature_importances.index = X.columns
 feature_importances.columns = ['values']
 feature_importances = feature_importances.sort_values(by='values', ascending=False)
@@ -828,20 +831,38 @@ X_ca = wf_ca.drop(columns=['class', 'fire_size', 'cont_time'])
 y_ca = wf_ca['class']
 X_train, X_test, y_train, y_test = train_test_split(X_ca, y_ca, test_size=0.3, stratify=y_ca, random_state=42)
 # model fitting
-xgb = xg.XGBClassifier(subsample=0.9, nthread=4, n_estimators=500, min_child_weight=2, max_depth=11,
-                       learning_rate=0.03, colsample_bytree=0.9)
-model = xgb.fit(X_train, y_train)
-y_pred = model.predict(X_test)
+# tune hyperparameters
+parameters = {'nthread': [4], #when use hyperthread, xgboost may become slower
+              'learning_rate': [.01, .005], #so called `eta` value
+              'max_depth': [9],
+              'min_child_weight': [3],
+              'subsample': [0.7],
+              'colsample_bytree': [0.6, 0.5],
+              'n_estimators': [600, 550]}
+print(parameters)
+xgb = xg.XGBClassifier()
+# Random search of parameters, using 3 fold cross validation,
+# search across different combinations, and use all available cores
+xgb_random = RandomizedSearchCV(xgb, param_distributions=parameters, cv=3, n_iter=5, verbose=2, n_jobs=-1)
+# Fit the random search model
+xgb_random.fit(X_train, y_train)
+print(xgb_random.best_params_)
+# {'subsample': 0.7, 'nthread': 4, 'n_estimators': 500, 'min_child_weight': 2, 'max_depth': 9, 'learning_rate': 0.02, 'colsample_bytree': 0.7}
+# {'subsample': 0.7, 'nthread': 4, 'n_estimators': 550, 'min_child_weight': 3, 'max_depth': 9, 'learning_rate': 0.01, 'colsample_bytree': 0.6}
+
+# evaluate the best model
+best_random = xgb_random.best_estimator_
+y_pred = best_random.predict(X_test)
 print('Accuracy Score:', accuracy_score(y_test, y_pred))
 print('Recall Score:', recall_score(y_test, y_pred, pos_label="large"))
 print('F1 Score:', f1_score(y_test, y_pred, pos_label="large"))
 '''
 Accuracy Score: 0.6549288961981232
-Recall Score: 0.6433475967757986
-F1 Score: 0.6444377990430623
+Recall Score: 0.6356851428002787
+F1 Score: 0.641687594173782
 '''
 # Extract feature importances
-feature_importances = pd.DataFrame(model.feature_importances_)
+feature_importances = pd.DataFrame(best_random.feature_importances_)
 feature_importances.index = X_ca.columns
 feature_importances.columns = ['values']
 feature_importances = feature_importances.sort_values(by='values', ascending=False)
